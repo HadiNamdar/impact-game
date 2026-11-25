@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0f172a">
+<title>Example 3 | Impact Lab</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app"></div>
+<script src="common.js"></script>
+<script>
+(() => {
+const { fmt } = IC;
+const g = 32.2, r = 3, e = 0.85, R = 0.28;
+const v0 = Math.sqrt(2 * g * r);
+const a1 = v0 * (1 - e) / 2, b1 = v0 * (1 + e) / 2;
+const b2 = b1 * (1 - e) / 2, c2 = b1 * (1 + e) / 2;
+const XB = r + 2.6, XC = r + 6.6;
+function collide(u1, u2) { return [u1 * (1 - e) / 2 + u2 * (1 + e) / 2, u1 * (1 + e) / 2 + u2 * (1 - e) / 2]; }
+
+IC.start({
+  n: 3, title: 'Three-ball chain collision', speed: 0.25, aspect: 0.5,
+  statement: 'Ball A is released from rest at the top of a smooth quarter-circle track. It slides down, hits ball B, and then B hits ball C. All three balls are identical.',
+  given: [['Weight of each ball', '0.5 lb'], ['Track radius r', '3 ft'], ['Coefficient of restitution e', '0.85'], ['Friction', 'none']],
+  find: 'the velocity of each ball after the second collision (B hits C).',
+  note: 'Use → as positive and enter velocities in ft/s. The dashed orange balls move with <b>your</b> final answers, so if they drift apart from the real balls, something is off.',
+  answers: [
+    { key: 'v0', label: 'Speed of A at the bottom', unit: 'ft/s', step: true, value: () => v0 },
+    { key: 'b1', label: 'B after 1st collision', unit: 'ft/s', step: true, value: () => b1 },
+    { key: 'vA', label: 'Ball A, final', unit: 'ft/s', value: () => a1, signed: true },
+    { key: 'vB', label: 'Ball B, final', unit: 'ft/s', value: () => b2, signed: true },
+    { key: 'vC', label: 'Ball C, final', unit: 'ft/s', value: () => c2, signed: true }
+  ],
+  ghost: v => (v.vA !== null || v.vB !== null || v.vC !== null) ? v : null,
+  solution: () => `
+    <h4>1 · Energy: A slides down the smooth track</h4>
+    ½mv<sub>A</sub>² = mgr → v<sub>A</sub> = √(2·32.2·3) = <span class="res">${fmt(v0, 2)} ft/s</span>
+    <h4>2 · Collision A → B (equal masses, B at rest)</h4>
+    Momentum: v<sub>A</sub> = v<sub>A</sub>′ + v<sub>B</sub>′ &nbsp;(masses cancel)<br>
+    Restitution: v<sub>B</sub>′ − v<sub>A</sub>′ = e·v<sub>A</sub><br>
+    → v<sub>A</sub>′ = v<sub>A</sub>(1 − e)/2 = <b>${fmt(a1, 3)} ft/s</b>, &nbsp;v<sub>B</sub>′ = v<sub>A</sub>(1 + e)/2 = <b>${fmt(b1, 2)} ft/s</b>
+    <h4>3 · Collision B → C (C at rest)</h4>
+    Same equations with v<sub>B</sub>′ = ${fmt(b1, 2)} ft/s:<br>
+    v<sub>B</sub>″ = v<sub>B</sub>′(1 − e)/2, &nbsp;v<sub>C</sub> = v<sub>B</sub>′(1 + e)/2
+    <h4>Result (all →)</h4>
+    <span class="res">v<sub>A</sub> = ${fmt(a1, 2)} ft/s, v<sub>B</sub> = ${fmt(b2, 3)} ft/s, v<sub>C</sub> = ${fmt(c2, 1)} ft/s</span><br>
+    Note: A (${fmt(a1, 2)}) is slightly faster than B (${fmt(b2, 2)}), so A will eventually catch B again. The question only asks about the moment after the 2nd collision.`,
+  scene: {
+    init: () => ({ phase: 'arc', phi: 0.002, xA: 0, vA: 0, xB: XB, vB: 0, xC: XC, vC: 0, hits: 0, t: 0, t2: 0, flash: 0, fx: 0 }),
+    step(s, dt) {
+      const n = 30, h = dt / n;
+      for (let i = 0; i < n; i++) {
+        s.t += h; s.flash = Math.max(0, s.flash - h * 5);
+        if (s.phase === 'arc') {
+          const v = Math.sqrt(2 * g * r * Math.sin(s.phi));
+          s.phi += Math.max(v, 0.6) / r * h;
+          if (s.phi >= Math.PI / 2) { s.phase = 'flat'; s.xA = r; s.vA = v0; }
+          continue;
+        }
+        s.xA += s.vA * h; s.xB += s.vB * h; s.xC += s.vC * h;
+        if (s.hits === 0 && s.xA + 2 * R >= s.xB) { [s.vA, s.vB] = collide(s.vA, s.vB); s.hits = 1; s.flash = 1; s.fx = s.xB - R; }
+        if (s.hits === 1 && s.xB + 2 * R >= s.xC) {
+          [s.vB, s.vC] = collide(s.vB, s.vC); s.hits = 2; s.flash = 1; s.fx = s.xC - R;
+          s.g0 = { A: s.xA, B: s.xB, C: s.xC };
+        }
+        if (s.hits === 2) { s.t2 += h; if (s.t2 > 0.75 || s.xC > 15.2) return true; }
+      }
+      return false;
+    },
+    draw(D, W, H, s, st) {
+      const sc = Math.min(W / 16.5, H * 0.78 / (r + 1.2)), ox = 22, gy = H - 0.13 * H, X = x => ox + x * sc, Y = y => gy - y * sc;
+      const c = D.ctx;
+      // track: vertical wall + quarter arc + floor
+      c.save(); c.strokeStyle = '#94a3b8'; c.lineWidth = 3; c.beginPath();
+      c.moveTo(X(0), Y(r + 1)); c.lineTo(X(0), Y(r)); c.arc(X(r), Y(r), r * sc, Math.PI, Math.PI / 2, true); c.lineTo(W, Y(0)); c.stroke(); c.restore();
+      c.fillStyle = '#273449'; c.beginPath(); c.moveTo(X(0) - 3, Y(r + 1)); c.lineTo(X(0) - 3, Y(r));
+      c.arc(X(r), Y(r), r * sc + 3, Math.PI, Math.PI / 2, true); c.lineTo(W, Y(0) + 3); c.lineTo(W, H); c.lineTo(0, H); c.lineTo(0, Y(r + 1)); c.fill();
+      D.line(X(r), Y(r), X(r) - r * sc * 0.7071, Y(r) + r * sc * 0.7071, '#64748b', 1, [3, 4]);
+      D.text('r = 3 ft', X(r) - r * sc * 0.25, Y(r) + r * sc * 0.42, '#94a3b8', 'center', 11);
+      const ball = (x, y, col, lbl) => {
+        D.circle(X(x), Y(y), R * sc, col); D.circle(X(x) - R * sc * 0.3, Y(y) + R * sc * 0.3 * -1, R * sc * 0.28, 'rgba(255,255,255,.55)');
+        D.text(lbl, X(x), Y(y) - R * sc - 6, '#e2e8f0', 'center', 12, 800);
+      };
+      // ghost balls (student's finals)
+      if (st.ghost && s.hits === 2) {
+        const gv = st.ghost, tt = s.t2;
+        [['A', gv.vA], ['B', gv.vB], ['C', gv.vC]].forEach(([k, v]) => {
+          if (v === null) return;
+          D.circle(X(s.g0[k] + v * tt), Y(R), R * sc, null, '#f59e0b', 2.5, [4, 3]);
+        });
+        D.tag('dashed = your answers', W - 12, 22, '#f59e0b', 'right');
+      }
+      // A
+      let ax, ay;
+      if (s.phase === 'arc') { ax = r - (r - R) * Math.cos(s.phi); ay = r - (r - R) * Math.sin(s.phi); }
+      else { ax = s.xA; ay = R; }
+      ball(ax, ay, '#e879f9', 'A'); ball(s.xB, R, '#e879f9', 'B'); ball(s.xC, R, '#e879f9', 'C');
+      if (s.flash > 0) D.circle(X(s.fx), Y(R), (1 - s.flash) * sc + 4, null, `rgba(251,191,36,${s.flash})`, 3);
+      // readouts
+      const vAnow = s.phase === 'arc' ? Math.sqrt(2 * g * r * Math.sin(s.phi)) : s.vA;
+      const lines = [['A', vAnow], ['B', s.vB], ['C', s.vC]];
+      lines.forEach(([k, v], i) => D.text(`v_${k} = ${fmt(v, 2)} ft/s`, W - 14, 50 + i * 18, '#cbd5e1', 'right', 12, 700));
+      D.text(['A sliding down', 'after 1st collision', 'after 2nd collision'][s.phase === 'arc' ? 0 : s.hits === 0 ? 0 : s.hits], W - 14, 50 + 3 * 18, '#64748b', 'right', 11);
+    }
+  }
+});
+})();
+</script>
+</body>
+</html>

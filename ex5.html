@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0f172a">
+<title>Example 5 | Impact Lab</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app"></div>
+<script src="common.js"></script>
+<script>
+(() => {
+const { fmt } = IC;
+const g = 32.2, mA = 1 / g, mB = 10 / g, k = 20, h = 3, slide = 4, e = 0.5, dt0 = 0.002;
+const stretch = Math.hypot(h, slide) - h;                     // 2 ft
+const vB2 = Math.sqrt(k * stretch * stretch / mB);
+const vA1 = (mA + mB) * vB2 / (mA * (1 + e));
+const vA2 = vB2 - e * vA1;                                    // negative → rebounds left
+const F = mB * vB2 / dt0;
+const wA = 0.7, wB = 0.9;
+
+IC.start({
+  n: 5, title: 'Collar strikes a collar on a spring', speed: 0.1, aspect: 0.5,
+  statement: 'Collar B is at rest on a smooth horizontal rod, attached to a spring that is <b>unstretched</b> (vertical, 3 ft long). Collar A hits B, and B slides <b>4 ft</b> along the rod before it momentarily stops.',
+  given: [['Weight of A', '1 lb'], ['Weight of B', '10 lb'], ['Spring stiffness k', '20 lb/ft'], ['Unstretched length', '3 ft (vertical)'], ['B slides', '4 ft'], ['Coefficient of restitution e', '0.5'], ['Impact time Δt', '0.002 s']],
+  find: 'the velocity of A just after impact, and the average force between A and B during the impact.',
+  note: 'Take → (toward B) as positive. The average force is the size of the force in <b>lb</b> (1 kip = 1000 lb).',
+  answers: [
+    { key: 'vB2', label: 'Speed of B just after impact', unit: 'ft/s', step: true, value: () => vB2 },
+    { key: 'vA1', label: 'Speed of A just before impact', unit: 'ft/s', step: true, value: () => vA1 },
+    { key: 'vA2', label: 'Velocity of A just after impact', unit: 'ft/s', value: () => vA2, signed: true, signNote: 'A bounces back, away from B.' },
+    { key: 'F', label: 'Average impact force', unit: 'lb', value: () => F }
+  ],
+  ghost: v => v.vA2 !== null ? { vA2: v.vA2 } : null,
+  solution: () => `
+    <h4>1 · Work–energy for B after the impact</h4>
+    Spring length when B stops: √(3² + 4²) = 5 ft → stretch s = 5 − 3 = 2 ft<br>
+    ½m<sub>B</sub>v<sub>B2</sub>² = ½k s² → ½(10/32.2)v<sub>B2</sub>² = ½(20)(2)²<br>
+    → <span class="res">v<sub>B2</sub> = ${fmt(vB2, 2)} ft/s</span>
+    <h4>2 · Impact: momentum + restitution (→ positive)</h4>
+    (1/32.2)v<sub>A1</sub> = (1/32.2)v<sub>A2</sub> + (10/32.2)(${fmt(vB2, 2)})<br>
+    e = 0.5 = (${fmt(vB2, 2)} − v<sub>A2</sub>)/(v<sub>A1</sub> − 0)<br>
+    → v<sub>A1</sub> = ${fmt(vA1, 1)} ft/s, &nbsp;<span class="res">v<sub>A2</sub> = ${fmt(vA2, 1)} ft/s, so ${fmt(-vA2, 1)} ft/s ←</span>
+    <h4>3 · Impulse on B during the impact</h4>
+    m<sub>B</sub>(v<sub>B</sub>)<sub>1</sub> + F<sub>avg</sub>Δt = m<sub>B</sub>v<sub>B2</sub><br>
+    0 + F<sub>avg</sub>(0.002) = (10/32.2)(${fmt(vB2, 2)})<br>
+    → <span class="res">F<sub>avg</sub> = ${fmt(F, 0)} lb ≈ ${fmt(F / 1000, 2)} kip</span><br>
+    (Checking on A gives the same value: m<sub>A</sub>(v<sub>A1</sub> − v<sub>A2</sub>)/Δt.)`,
+  scene: {
+    init: () => ({ phase: 1, xA: -5.2, vA: vA1, xB: 0, vB: 0, flash: 0, hold: 0, xImp: null, t: 0 }),
+    step(s, dt) {
+      const n = 60, hh = dt / n;
+      for (let i = 0; i < n; i++) {
+        s.t += hh; s.flash = Math.max(0, s.flash - hh * 30);
+        s.xA += s.vA * hh;
+        if (s.phase === 1) {
+          if (s.xA + wA / 2 >= s.xB - wB / 2) { s.xA = s.xB - wB / 2 - wA / 2; s.phase = 2; s.vA = vA2; s.vB = vB2; s.flash = 1; s.xImp = s.xA; s.tImp = s.t; }
+        } else if (s.phase === 2) {
+          const L = Math.hypot(h, s.xB), Fx = -k * (L - h) * s.xB / L;
+          s.vB += Fx / mB * hh; s.xB += s.vB * hh;
+          if (s.vB <= 0) { s.vB = 0; s.phase = 3; }
+        } else { s.hold += hh; if (s.hold > 0.08) return true; }
+      }
+      return false;
+    },
+    draw(D, W, H, s, st) {
+      const sc = Math.min(W / 13, H / 5.4), ox = W * 0.5 - 0.6 * sc, ry = H * 0.72, X = x => ox + x * sc, Y = y => ry - y * sc;
+      // rod
+      D.rrect(0, ry - 6, W, 12, 6, '#38bdf8');
+      D.ctx.fillStyle = 'rgba(255,255,255,.25)'; D.ctx.fillRect(0, ry - 4, W, 2);
+      // anchor
+      D.rrect(X(0) - 18, Y(h) - 12, 36, 10, 3, '#94a3b8');
+      D.line(X(0) - 26, Y(h) - 12, X(0) + 26, Y(h) - 12, '#64748b', 3);
+      // dims
+      D.line(X(0), Y(h), X(0), ry, 'rgba(148,163,184,.35)', 1, [3, 4]);
+      D.text('3 ft', X(0) - 30, Y(h / 2), '#64748b', 'right', 11);
+      D.line(X(0), ry + 30, X(slide), ry + 30, '#64748b', 1); D.line(X(slide), ry + 22, X(slide), ry + 38, '#64748b', 1);
+      D.text('4 ft', X(slide / 2), ry + 26, '#94a3b8', 'center', 11);
+      // spring
+      D.zigzag(X(0), Y(h) - 2, X(s.xB), ry - 10, 16, Math.min(0.12 * sc, 9), '#cbd5e1');
+      const L = Math.hypot(h, s.xB);
+      D.text(`k = 20 lb/ft · stretch = ${fmt(L - h, 2)} ft`, X(0) + 30, Y(h) + 4, '#94a3b8', 'left', 11);
+      // collars
+      const collar = (x, w, col, lbl, stroke, dash) => {
+        D.rrect(X(x - w / 2), ry - 0.32 * sc, w * sc, 0.64 * sc, 6, col, stroke, 2.5, dash);
+        if (lbl) D.text(lbl, X(x), ry + 0.32 * sc + 16, '#e2e8f0', 'center', 13, 800);
+      };
+      if (st.ghost && s.xImp !== null) {
+        const gx = s.xImp + st.ghost.vA2 * (s.t - s.tImp);
+        collar(gx, wA, null, '', '#f59e0b', [5, 4]);
+        D.tag(`your v_A′ = ${fmt(st.ghost.vA2, 1)} ft/s`, X(gx), ry - 0.32 * sc - 30, '#f59e0b');
+      }
+      collar(s.xB, wB, '#93c5fd', 'B');
+      collar(s.xA, wA, '#5eead4', 'A');
+      if (s.flash > 0) D.circle(X(s.xB - wB / 2), ry, (1 - s.flash) * 0.9 * sc + 5, null, `rgba(251,191,36,${s.flash})`, 4);
+      // readouts
+      D.text(`v_A = ${fmt(s.vA, 1)} ft/s`, 14, 22, '#5eead4', 'left', 12, 700);
+      D.text(`v_B = ${fmt(s.vB, 2)} ft/s`, 14, 40, '#93c5fd', 'left', 12, 700);
+      D.text(`B position = ${fmt(s.xB, 2)} ft`, 14, 58, '#94a3b8', 'left', 12, 600);
+      if (s.phase >= 2) D.tag(`impact: F_avg ≈ ${fmt(F, 0)} lb over 0.002 s`, W - 12, 24, '#fcd34d', 'right');
+      if (s.phase === 3) D.tag(`B stops at ${fmt(s.xB, 2)} ft`, X(s.xB), ry - 0.32 * sc - 10, '#34d399');
+    }
+  }
+});
+})();
+</script>
+</body>
+</html>

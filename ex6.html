@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0f172a">
+<title>Example 6 | Impact Lab</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app"></div>
+<script src="common.js"></script>
+<script>
+(() => {
+const { fmt } = IC;
+const v0 = 2.5, e = 0.6, Wt = 2.4, Ht = 1.2, yA = 0.85, c45 = Math.SQRT1_2;
+const vn = v0 * c45, vt = v0 * c45;                 // components at A
+const vAfterA = Math.hypot(e * vn, vt);
+const vAfterB = Math.hypot(e * vn, e * vt);
+const tA = 1.0 / v0, xStart = Wt - c45 * 1.0, yStart = yA - c45 * 1.0;
+const tB = (Ht - yA) / vt, xB = Wt - e * vn * tB;
+
+IC.start({
+  n: 6, title: 'Billiard ball off two cushions', speed: 0.5, aspect: 0.56,
+  statement: 'A billiard ball hits the side cushion at A at 45°, bounces off, and then hits the next (perpendicular) cushion at B. Ignore the size of the ball and assume the table is smooth.',
+  given: [['Mass', '200 g'], ['Speed before A', '2.5 m/s'], ['Angle with cushion at A', '45°'], ['Coefficient of restitution e', '0.6']],
+  find: 'the speed of the ball just after it strikes the table at A and then at B.',
+  answers: [
+    { key: 'vA', label: 'Speed just after A', unit: 'm/s', step: true, value: () => vAfterA },
+    { key: 'vB', label: 'Speed just after B', unit: 'm/s', value: () => vAfterB }
+  ],
+  ghost: v => v.vB !== null ? { vB: v.vB } : null,
+  solution: () => `
+    <h4>Idea</h4>
+    At each cushion, the component <b>along</b> the cushion (t) is unchanged (smooth). The component <b>normal</b> to it (n) reverses and is multiplied by e.
+    <h4>1 · Impact at A</h4>
+    Before: v<sub>n</sub> = 2.5 cos 45° = ${fmt(vn, 3)} m/s, &nbsp;v<sub>t</sub> = 2.5 sin 45° = ${fmt(vt, 3)} m/s<br>
+    After: v<sub>n</sub>′ = 0.6(${fmt(vn, 3)}) = ${fmt(e * vn, 3)} m/s, &nbsp;v<sub>t</sub>′ = ${fmt(vt, 3)} m/s<br>
+    v<sub>A</sub>′ = √(${fmt(e * vn, 3)}² + ${fmt(vt, 3)}²) → <b>${fmt(vAfterA, 2)} m/s</b>
+    <h4>2 · Impact at B (perpendicular cushion)</h4>
+    Now the roles swap: the old tangential component ${fmt(vt, 3)} is <b>normal</b> to cushion B.<br>
+    After: v<sub>n</sub>″ = 0.6(${fmt(vt, 3)}) = ${fmt(e * vt, 3)} m/s, &nbsp;v<sub>t</sub>″ = ${fmt(e * vn, 3)} m/s (unchanged)<br>
+    v<sub>B</sub>′ = √(${fmt(e * vt, 3)}² + ${fmt(e * vn, 3)}²) → <span class="res">v = ${fmt(vAfterB, 2)} m/s</span>
+    <h4>Shortcut</h4>
+    Each component got multiplied by e exactly once, so v = e·v<sub>0</sub> = 0.6 × 2.5 = 1.5 m/s. The ball also comes out parallel to its original path, but going the opposite way.`,
+  scene: {
+    init: () => ({ t: 0, trail: [], hold: 0 }),
+    step(s, dt) {
+      s.t += dt;
+      if (s.t > tA + tB + 0.95) return true;
+      return false;
+    },
+    draw(D, W, H, s, st) {
+      const m = 48, sc = Math.min((W - 2 * m) / Wt, (H - 2 * m) / Ht), ox = (W - Wt * sc) / 2, oy = (H - Ht * sc) / 2;
+      const X = x => ox + x * sc, Y = y => oy + y * sc, rail = Math.max(12, sc * 0.07);
+      D.rrect(ox - rail, oy - rail, Wt * sc + 2 * rail, Ht * sc + 2 * rail, 14, '#6b4423');
+      D.ctx.fillStyle = '#0e7490'; D.ctx.fillRect(ox, oy, Wt * sc, Ht * sc);
+      const pr = Math.max(8, sc * 0.05);
+      [[0, 0], [Wt / 2, 0], [Wt, 0], [0, Ht], [Wt / 2, Ht], [Wt, Ht]].forEach(([x, y]) => D.circle(X(x), Y(y), pr, '#020617'));
+      // position at time t
+      const pos = t => {
+        if (t <= tA) return [xStart + vn * t, yStart + vt * t, vn, vt];
+        if (t <= tA + tB) { const u = t - tA; return [Wt - e * vn * u, yA + vt * u, -e * vn, vt]; }
+        const u = t - tA - tB; return [xB - e * vn * u, Ht - e * vt * u, -e * vn, -e * vt];
+      };
+      // path
+      const c = D.ctx; c.save(); c.strokeStyle = 'rgba(255,255,255,.6)'; c.lineWidth = 2; c.beginPath();
+      for (let t = 0; t <= s.t; t += 0.005) { const [x, y] = pos(t); t === 0 ? c.moveTo(X(x), Y(y)) : c.lineTo(X(x), Y(y)); }
+      c.stroke(); c.restore();
+      // start velocity label
+      D.tag('v = 2.5 m/s', X(xStart) - 6, Y(yStart) - 10, '#e2e8f0', 'right');
+      // labels A and B
+      D.text('A', X(Wt) + rail + 5, Y(yA) + 5, '#fcd34d', 'left', 14, 800);
+      D.text('B', X(xB), Y(Ht) + rail + 16, '#fcd34d', 'center', 14, 800);
+      // 45° marker at A
+      c.save(); c.strokeStyle = '#fcd34d'; c.lineWidth = 1.5; c.beginPath(); c.arc(X(Wt), Y(yA), 0.16 * sc, -Math.PI / 2, -Math.PI / 4 - Math.PI / 2 + Math.PI / 4 - Math.PI / 4, true); c.stroke(); c.restore();
+      D.text('45°', X(Wt) - 0.2 * sc, Y(yA) - 0.17 * sc, '#fcd34d', 'right', 12, 700);
+      // component arrows after A
+      if (s.t > tA) {
+        const k = 0.16 * sc;
+        D.arrow(X(Wt) - 2, Y(yA), X(Wt) - 2 - e * vn * k, Y(yA), '#f472b6', 2.5);
+        D.arrow(X(Wt) - 2, Y(yA), X(Wt) - 2, Y(yA) + vt * k, '#a78bfa', 2.5);
+        D.text(`n: ${fmt(vn, 2)} → ${fmt(e * vn, 2)}`, X(Wt) - 2 - e * vn * k - 6, Y(yA) - 6, '#f472b6', 'right', 11, 700);
+        D.text(`t: ${fmt(vt, 2)} (same)`, X(Wt) - 8, Y(yA) + vt * k * 0.6, '#a78bfa', 'right', 11, 700);
+      }
+      // ghost
+      if (st.ghost && s.t > tA + tB) {
+        const u = s.t - tA - tB, gv = st.ghost.vB * c45;
+        D.circle(X(xB - gv * u), Y(Ht - gv * u), Math.max(6, sc * 0.03), null, '#f59e0b', 2.5, [4, 3]);
+        D.tag(`your speed ${fmt(st.ghost.vB, 2)} m/s`, X(xB - gv * u) - 8, Y(Ht - gv * u) + 26, '#f59e0b', 'right');
+      }
+      const [x, y, vx, vy] = pos(Math.min(s.t, tA + tB + 0.95));
+      D.circle(X(x), Y(y), Math.max(6, sc * 0.03), '#f8fafc');
+      D.tag(`speed = ${fmt(Math.hypot(vx, vy), 2)} m/s`, W / 2, oy - rail - 8, '#e2e8f0', 'center');
+    }
+  }
+});
+})();
+</script>
+</body>
+</html>

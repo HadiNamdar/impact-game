@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0f172a">
+<title>Example 1 | Impact Lab</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app"></div>
+<script src="common.js"></script>
+<script>
+(() => {
+const { fmt } = IC;
+const mT = 5000, mC = 2000, vT = 30 / 3.6, vC = 10 / 3.6, REL = 15 / 3.6;
+function post(e) {
+  const vT2 = (mT * vT + mC * vC - mC * e * (vT - vC)) / (mT + mC);
+  return { vT2, vC2: vT2 + e * (vT - vC) };
+}
+const E = REL / (vT - vC), P = post(E);
+const KE = (a, b) => 0.5 * mT * a * a + 0.5 * mC * b * b;
+const T1 = KE(vT, vC), T2 = KE(P.vT2, P.vC2), LOSS = T1 - T2;
+const vG = (mT * vT + mC * vC) / (mT + mC);
+const kmh = v => v * 3.6;
+
+IC.start({
+  n: 1, title: 'Truck rear-ends a car', speed: 0.5,
+  statement: 'A truck and a car roll freely to the right, and the truck catches up and hits the car from behind. Right after the impact, the car moves <b>15 km/h to the right relative to the truck</b>.',
+  given: [['Truck mass', '5 Mg'], ['Car mass', '2 Mg'], ['Truck speed before', '30 km/h →'], ['Car speed before', '10 km/h →'], ['Car rel. to truck after', '15 km/h →']],
+  find: 'the coefficient of restitution <i>e</i> and the kinetic energy lost in the collision.',
+  answers: [
+    { key: 'vT2', label: 'Truck speed after', unit: 'km/h', step: true, value: () => kmh(P.vT2) },
+    { key: 'vC2', label: 'Car speed after', unit: 'km/h', step: true, value: () => kmh(P.vC2) },
+    { key: 'e', label: 'Coefficient of restitution <i>e</i>', unit: '', value: () => E },
+    { key: 'loss', label: 'Energy lost', unit: 'kJ', value: () => LOSS / 1000 }
+  ],
+  ghost(v) { return v.e !== null ? { e: v.e, ...post(v.e) } : null; },
+  solution: () => `
+    <h4>1 · Conservation of momentum (truck + car)</h4>
+    m<sub>T</sub>v<sub>T1</sub> + m<sub>C</sub>v<sub>C1</sub> = m<sub>T</sub>v<sub>T2</sub> + m<sub>C</sub>v<sub>C2</sub><br>
+    5(30) + 2(10) = 5v<sub>T2</sub> + 2v<sub>C2</sub> &nbsp;(km/h, Mg)<br>
+    Relative velocity: v<sub>C2</sub> = v<sub>T2</sub> + 15<br>
+    → 170 = 7v<sub>T2</sub> + 30 → <span class="res">v<sub>T2</sub> = ${fmt(kmh(P.vT2), 1)} km/h, v<sub>C2</sub> = ${fmt(kmh(P.vC2), 1)} km/h</span>
+    <h4>2 · Coefficient of restitution</h4>
+    e = (v<sub>C2</sub> − v<sub>T2</sub>)/(v<sub>T1</sub> − v<sub>C1</sub>) = 15/(30 − 10) → <span class="res">e = ${fmt(E, 2)}</span>
+    <h4>3 · Energy loss (convert to m/s)</h4>
+    30 km/h = ${fmt(vT, 3)} m/s, 10 = ${fmt(vC, 3)}, ${fmt(kmh(P.vT2), 0)} = ${fmt(P.vT2, 3)}, ${fmt(kmh(P.vC2), 0)} = ${fmt(P.vC2, 3)} m/s<br>
+    T<sub>1</sub> = ½(5000)(${fmt(vT, 3)})² + ½(2000)(${fmt(vC, 3)})² = ${fmt(T1 / 1000, 2)} kJ<br>
+    T<sub>2</sub> = ½(5000)(${fmt(P.vT2, 3)})² + ½(2000)(${fmt(P.vC2, 3)})² = ${fmt(T2 / 1000, 2)} kJ<br>
+    ΔE = T<sub>1</sub> − T<sub>2</sub> → <span class="res">ΔE = ${fmt(LOSS / 1000, 2)} kJ</span> &nbsp;(only ${fmt(100 * LOSS / T1, 1)}% of the energy!)`,
+  scene: {
+    init: () => ({ t: 0, xT: -4.5, xC: 3, vt: vT, vc: vC, hit: false, tHit: 0, xHit: 0, after: 0, flash: 0 }),
+    step(s, dt) {
+      const n = 10, h = dt / n;
+      for (let i = 0; i < n; i++) {
+        s.t += h; s.xT += s.vt * h; s.xC += s.vc * h;
+        if (!s.hit && s.xT >= s.xC) { s.hit = true; s.vt = P.vT2; s.vc = P.vC2; s.tHit = s.t; s.xHit = s.xC; s.flash = 1; }
+        if (s.hit) { s.after += h; s.flash = Math.max(0, s.flash - h * 4); if (s.after > 2.4) return true; }
+      }
+      return false;
+    },
+    draw(D, W, H, s, st) {
+      const sc = W / 24, gy = H * 0.74, cam = -0.75 + vG * s.t, X = x => W * 0.5 + (x - cam) * sc, Y = y => gy - y * sc;
+      D.ground(gy, W, H, false);
+      for (let k = Math.floor((cam - 14) / 3); k < (cam + 14) / 3; k++) D.ctx.fillStyle = '#64748b', D.ctx.fillRect(X(k * 3), gy + 10, 1.4 * sc, 3);
+      const truck = (xf, col, stroke, dash) => {
+        D.rrect(X(xf - 7), Y(3.4), 4.8 * sc, 2.9 * sc, 4, col, stroke, 2, dash);
+        D.rrect(X(xf - 2.15), Y(2.3), 2.15 * sc, 1.8 * sc, 6, col ? '#60a5fa' : null, stroke, 2, dash);
+        if (col) D.rrect(X(xf - 1.2), Y(2.05), 0.9 * sc, 0.75 * sc, 3, '#bfdbfe');
+        [xf - 5.8, xf - 1.1].forEach(x => D.circle(X(x), Y(0.45), 0.45 * sc, col ? '#0f172a' : null, stroke || '#94a3b8', 2, dash));
+      };
+      const car = (xr, col, stroke, dash) => {
+        D.rrect(X(xr), Y(1.25), 4.4 * sc, 0.85 * sc, 8, col, stroke, 2, dash);
+        D.rrect(X(xr + 1.1), Y(1.85), 2.2 * sc, 0.7 * sc, 10, col, stroke, 2, dash);
+        if (col) D.rrect(X(xr + 1.35), Y(1.75), 1.7 * sc, 0.45 * sc, 4, '#bfdbfe');
+        [xr + 0.95, xr + 3.45].forEach(x => D.circle(X(x), Y(0.4), 0.4 * sc, col ? '#0f172a' : null, stroke || '#94a3b8', 2, dash));
+      };
+      // ghost (student's e)
+      if (st.ghost && s.hit) {
+        const g = st.ghost, tt = s.t - s.tHit;
+        D.alpha(0.9, () => {
+          truck(s.xHit + g.vT2 * tt, null, '#f59e0b', [5, 4]); car(s.xHit + g.vC2 * tt, null, '#f59e0b', [5, 4]);
+        });
+        D.tag(`your e = ${fmt(g.e, 2)} → car ${fmt(kmh(g.vC2), 1)}, truck ${fmt(kmh(g.vT2), 1)} km/h`, 12, H - 14, '#f59e0b', 'left', 12);
+      }
+      truck(s.xT, '#94a3b8'); car(s.xC, '#34d399');
+      if (s.flash > 0) D.circle(X(s.xHit), Y(1.2), (1 - s.flash) * 2.5 * sc + 6, null, `rgba(251,191,36,${s.flash})`, 4);
+      D.tag(`${fmt(kmh(s.vt), 1)} km/h`, X(s.xT - 3.5), Y(3.4) - 8, '#e2e8f0');
+      D.tag(`${fmt(kmh(s.vc), 1)} km/h`, X(s.xC + 2.2), Y(1.85) - 8, '#34d399');
+      D.text('5 Mg', X(s.xT - 4.6), Y(1.9), '#0f172a', 'center', Math.max(11, sc * 0.9), 800);
+      // energy bars
+      const bx = 14, bw = Math.min(220, W * 0.32), by = 16;
+      D.text('Kinetic energy', bx, by + 10, '#94a3b8', 'left', 11, 700);
+      D.rrect(bx, by + 18, bw, 12, 4, '#273449'); D.rrect(bx, by + 18, bw, 12, 4, '#60a5fa');
+      D.text(`before  ${fmt(T1 / 1000, 1)} kJ`, bx + bw + 8, by + 28, '#93c5fd', 'left', 11, 700);
+      if (s.hit) {
+        D.rrect(bx, by + 36, bw, 12, 4, '#273449'); D.rrect(bx, by + 36, bw * T2 / T1, 12, 4, '#34d399');
+        D.text(`after  ${fmt(T2 / 1000, 1)} kJ`, bx + bw + 8, by + 46, '#34d399', 'left', 11, 700);
+        D.text(`lost ${fmt(LOSS / 1000, 2)} kJ`, bx, by + 64, '#f87171', 'left', 12, 800);
+        D.tag(`car relative to truck: ${fmt(kmh(s.vc - s.vt), 1)} km/h →`, W - 12, 30, '#e2e8f0', 'right', 12);
+      } else {
+        D.tag(`car relative to truck: ${fmt(kmh(s.vc - s.vt), 1)} km/h`, W - 12, 30, '#94a3b8', 'right', 12);
+      }
+    }
+  }
+});
+})();
+</script>
+</body>
+</html>

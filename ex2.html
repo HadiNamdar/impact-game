@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0f172a">
+<title>Example 2 | Impact Lab</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app"></div>
+<script src="common.js"></script>
+<script>
+(() => {
+const { fmt } = IC;
+const mA = 15, mB = 10, mu = 0.3, g = 9.81, k = 1000, e = 0.6, v0 = 10, s0 = 4;
+const vA1 = Math.sqrt(v0 * v0 - 2 * mu * g * s0);
+const vA2 = (mA - e * mB) / (mA + mB) * vA1;           // leftward speeds (magnitudes)
+const vB2 = mA * (1 + e) / (mA + mB) * vA1;
+const xmax = fr => fr ? (-mu * mB * g + Math.sqrt((mu * mB * g) ** 2 + k * mB * vB2 * vB2)) / k : vB2 * Math.sqrt(mB / k);
+const L0 = 1.25, wB = 0.9, wA = 1.0;
+
+IC.start({
+  n: 2, title: 'Block hits a block on a spring', speed: 0.5,
+  options: [{ key: 'fricB', label: 'Friction (μk = 0.3) also acts on block B', default: true }],
+  statement: 'Block A slides to the left on a rough surface toward block B, which rests against an unstretched spring. A slows down over 4 m, then hits B.',
+  given: [['Mass of A', '15 kg'], ['Mass of B', '10 kg'], ['μ<sub>k</sub> (surface)', '0.3'], ['Speed of A at 4 m from B', '10 m/s ←'],
+    ['Spring stiffness k', '1000 N/m'], ['Coefficient of restitution e', '0.6']],
+  find: 'the maximum compression of the spring.',
+  note: 'The textbook answer depends on whether B also feels friction: <b>0.810 m</b> (yes) or <b>0.839 m</b> (B smooth). Use the checkbox under the animation to match how you solve it in class. Enter speeds as magnitudes.',
+  answers: [
+    { key: 'vA1', label: 'Speed of A just before impact', unit: 'm/s', step: true, value: () => vA1 },
+    { key: 'vB2', label: 'Speed of B just after impact', unit: 'm/s', step: true, value: () => vB2 },
+    { key: 'vA2', label: 'Speed of A just after impact', unit: 'm/s', step: true, value: () => vA2 },
+    { key: 'x', label: 'Maximum spring compression', unit: 'm', value: o => xmax(o.fricB) }
+  ],
+  ghost: v => v.x !== null ? { x: v.x } : null,
+  solution: o => `
+    <h4>1 · Work–energy: A slides 4 m</h4>
+    ½m<sub>A</sub>v<sub>0</sub>² − μ<sub>k</sub>m<sub>A</sub>g·s = ½m<sub>A</sub>v<sub>A1</sub>²<br>
+    ½(15)(10)² − 0.3(15)(9.81)(4) = ½(15)v<sub>A1</sub>² → <span class="res">v<sub>A1</sub> = ${fmt(vA1, 3)} m/s</span>
+    <h4>2 · Impact: momentum + restitution (← positive)</h4>
+    15(${fmt(vA1, 3)}) = 15v<sub>A2</sub> + 10v<sub>B2</sub><br>
+    e = 0.6 = (v<sub>B2</sub> − v<sub>A2</sub>)/(${fmt(vA1, 3)} − 0)<br>
+    → <span class="res">v<sub>A2</sub> = ${fmt(vA2, 3)} m/s, v<sub>B2</sub> = ${fmt(vB2, 3)} m/s</span>
+    <h4>3 · Work–energy: B compresses the spring</h4>
+    ${o.fricB
+      ? `½m<sub>B</sub>v<sub>B2</sub>² − μ<sub>k</sub>m<sub>B</sub>g·x − ½kx² = 0<br>½(10)(${fmt(vB2, 3)})² − 0.3(10)(9.81)x − ½(1000)x² = 0<br>${fmt(0.5 * mB * vB2 * vB2, 1)} − ${fmt(mu * mB * g, 2)}x − 500x² = 0`
+      : `½m<sub>B</sub>v<sub>B2</sub>² = ½kx² &nbsp;(B smooth)<br>½(10)(${fmt(vB2, 3)})² = ½(1000)x²`}
+    → <span class="res">x<sub>max</sub> = ${fmt(xmax(o.fricB), 4)} m ≈ ${o.fricB ? "0.810" : "0.839"} m</span>`,
+  scene: {
+    init: () => ({ phase: 1, aL: L0 + wB + s0, va: v0, comp: 0, vb: 0, flash: 0, t: 0 }),
+    step(s, dt, o) {
+      const n = 20, h = dt / n;
+      for (let i = 0; i < n; i++) {
+        s.t += h; s.flash = Math.max(0, s.flash - h * 4);
+        if (s.phase === 1) {
+          s.va = Math.max(0, s.va - mu * g * h); s.aL -= s.va * h;
+          if (s.aL <= L0 + wB) { s.aL = L0 + wB; s.phase = 2; s.va = vA2; s.vb = vB2; s.flash = 1; }
+        } else if (s.phase === 2) {
+          const ab = (k * s.comp + (o.fricB ? mu * mB * g : 0)) / mB;
+          s.vb -= ab * h; s.comp += s.vb * h;
+          s.va = Math.max(0, s.va - mu * g * h); s.aL -= s.va * h;
+          if (s.aL < L0 - s.comp + wB) s.aL = L0 - s.comp + wB;
+          if (s.vb <= 0) { s.comp = xmax(o.fricB); s.vb = 0; s.phase = 3; s.hold = 0; }
+        } else { s.hold += h; if (s.hold > 0.6) return true; }
+      }
+      return false;
+    },
+    draw(D, W, H, s, st) {
+      const sc = Math.min(W / 7.9, H / 3.4), gy = H * 0.7, ox = 30, X = x => ox + x * sc, Y = y => gy - y * sc;
+      D.ground(gy, W, H);
+      D.ctx.fillStyle = '#475569'; D.ctx.fillRect(X(-0.2), Y(1.6), 0.2 * sc, 1.6 * sc);
+      const bL = L0 - s.comp;
+      D.zigzag(X(0), Y(wB / 2), X(bL), Y(wB / 2), 14, Math.min(0.17 * sc, 16));
+      D.text('k = 1000 N/m', X(L0 / 2), gy + 40, '#94a3b8', 'center', 11);
+      // target / ghost lines
+      if (st.ghost) {
+        const gx = X(L0 - st.ghost.x);
+        D.line(gx, Y(1.75), gx, gy + 6, '#f59e0b', 2.5, [5, 4]);
+        D.tag(`your x = ${fmt(st.ghost.x, 3)} m`, gx, Y(1.75) - 4, '#f59e0b', 'left');
+      }
+      D.line(X(L0), gy + 2, X(L0), gy + 12, '#94a3b8', 1.5);
+      D.text('unstretched', X(L0), gy + 24, '#64748b', 'center', 10);
+      if (s.phase === 3) {
+        const ax = X(bL);
+        D.line(ax, Y(1.35), ax, gy, '#34d399', 2.5);
+        D.tag(`x_max = ${fmt(s.comp, 4)} m`, ax, Y(1.35) - 4, '#34d399', 'left');
+      }
+      // blocks
+      D.rrect(X(bL), Y(wB), wB * sc, wB * sc, 5, '#93c5fd');
+      D.text('B', X(bL + wB / 2), Y(wB / 2) + 6, '#0f172a', 'center', Math.max(13, sc * 0.35), 800);
+      D.rrect(X(s.aL), Y(wA), wA * sc, wA * sc, 5, '#f59e0b');
+      D.text('A', X(s.aL + wA / 2), Y(wA / 2) + 6, '#0f172a', 'center', Math.max(13, sc * 0.35), 800);
+      // s = 4 m dimension at start
+      if (s.phase === 1 && s.t < 0.02) {
+        const y = gy + 30; D.line(X(L0 + wB), y, X(L0 + wB + s0), y, '#94a3b8', 1);
+        D.text('s = 4 m', X(L0 + wB + s0 / 2), y - 5, '#94a3b8', 'center', 11);
+      }
+      if (s.flash > 0) D.circle(X(L0 + wB), Y(wB / 2), (1 - s.flash) * 1.2 * sc + 5, null, `rgba(251,191,36,${s.flash})`, 4);
+      // velocity labels
+      if (s.va > 0.01) D.tag(`v_A = ${fmt(s.va, 2)} m/s ←`, X(s.aL + wA / 2), Y(wA) - 10, '#fcd34d');
+      if (s.phase === 2) D.tag(`v_B = ${fmt(s.vb, 2)} m/s ←`, X(bL + wB / 2), Y(wB) - 34, '#bfdbfe');
+      D.text(st.opts.fricB ? 'friction on A and B' : 'friction on A only (B smooth)', W - 12, 20, '#64748b', 'right', 11);
+    }
+  }
+});
+})();
+</script>
+</body>
+</html>

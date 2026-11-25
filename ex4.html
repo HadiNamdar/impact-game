@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0f172a">
+<title>Example 4 | Impact Lab</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app"></div>
+<script src="common.js"></script>
+<script>
+(() => {
+const { fmt } = IC;
+const g = 32.2, h0 = 7.5, d = 20, e = 0.7, DEG = Math.PI / 180;
+const tH = Math.sqrt(2 * h0 / g), vA = d / tH, vy = g * tH, vy2 = e * vy;
+const vB = Math.hypot(vA, vy2), th = Math.atan2(vy2, vA) / DEG;
+const NET = 11;
+
+IC.start({
+  n: 4, title: 'Tennis serve bounce', speed: 0.5, aspect: 0.46,
+  statement: 'A tennis ball is served <b>horizontally</b> from 7.5 ft above the ground and lands on the smooth court at B, 20 ft away.',
+  given: [['Serve height', '7.5 ft'], ['Horizontal distance to B', '20 ft'], ['Coefficient of restitution e', '0.7'], ['Court', 'smooth'], ['g', '32.2 ft/s²']],
+  find: 'the serve speed v<sub>A</sub>, and the speed v<sub>B</sub> and angle θ just after the ball bounces at B.',
+  answers: [
+    { key: 't', label: 'Flight time A → B', unit: 's', step: true, value: () => tH },
+    { key: 'vy', label: 'Vertical speed just before B', unit: 'ft/s', step: true, value: () => vy },
+    { key: 'vA', label: 'Serve speed v<sub>A</sub>', unit: 'ft/s', value: () => vA },
+    { key: 'vB', label: 'Speed v<sub>B</sub> after bounce', unit: 'ft/s', value: () => vB },
+    { key: 'th', label: 'Angle θ after bounce', unit: '°', value: () => th }
+  ],
+  ghost: v => (v.vA !== null || v.vB !== null) ? v : null,
+  solution: () => `
+    <h4>1 · Projectile A → B (horizontal serve)</h4>
+    Vertical: 7.5 = ½(32.2)t² → <b>t = ${fmt(tH, 4)} s</b><br>
+    Horizontal: 20 = v<sub>A</sub>t → <span class="res">v<sub>A</sub> = ${fmt(vA, 1)} ft/s</span>
+    <h4>2 · Just before B</h4>
+    (v<sub>B1</sub>)<sub>x</sub> = ${fmt(vA, 2)} ft/s, &nbsp;(v<sub>B1</sub>)<sub>y</sub> = gt = ${fmt(vy, 2)} ft/s ↓
+    <h4>3 · Impact with the court (oblique)</h4>
+    Along the smooth court (x): momentum of the ball is conserved → (v<sub>B2</sub>)<sub>x</sub> = ${fmt(vA, 2)} ft/s<br>
+    Normal (y): (v<sub>B2</sub>)<sub>y</sub> = e·(v<sub>B1</sub>)<sub>y</sub> = 0.7(${fmt(vy, 2)}) = ${fmt(vy2, 2)} ft/s ↑<br>
+    v<sub>B</sub> = √(${fmt(vA, 2)}² + ${fmt(vy2, 2)}²) → <span class="res">v<sub>B</sub> = ${fmt(vB, 1)} ft/s</span><br>
+    θ = tan⁻¹(${fmt(vy2, 2)}/${fmt(vA, 2)}) → <span class="res">θ = ${fmt(th, 1)}°</span>`,
+  scene: {
+    init: () => ({ t: 0, phase: 1, trail: [], flash: 0, hold: 0 }),
+    step(s, dt) {
+      s.t += dt; s.flash = Math.max(0, s.flash - dt * 4);
+      if (s.phase === 1 && s.t >= tH) { s.phase = 2; s.flash = 1; }
+      if (s.phase === 2 && s.t - tH >= 2 * vy2 / g * 0.95) { s.phase = 3; }
+      if (s.phase === 3) { s.hold += dt; if (s.hold > 0.25) return true; }
+      return false;
+    },
+    draw(D, W, H, s, st) {
+      const sc = Math.min(W / 42, H / 12.5), ox = W / 2 - 18 * sc, gy = H - 0.12 * H, X = x => ox + x * sc, Y = y => gy - y * sc;
+      D.ground(gy, W, H, false);
+      D.ctx.fillStyle = '#2d6a4f'; D.ctx.fillRect(0, gy, W, 3);
+      // net
+      D.ctx.fillStyle = '#64748b'; D.ctx.fillRect(X(NET) - 2, Y(3), 4, 3 * sc);
+      D.ctx.fillStyle = 'rgba(148,163,184,.25)'; D.ctx.fillRect(X(NET) - 2, Y(3), 4, 3 * sc);
+      // server
+      D.line(X(-1.2), gy, X(-0.6), Y(3), '#cbd5e1', 3); D.line(X(-0.1), gy, X(-0.6), Y(3), '#cbd5e1', 3);
+      D.line(X(-0.6), Y(3), X(-0.6), Y(5.4), '#ef4444', 6); D.circle(X(-0.6), Y(6.0), 0.55 * sc, '#fcd34d');
+      D.line(X(-0.6), Y(5.2), X(-0.05), Y(7.3), '#cbd5e1', 3);
+      // dims
+      D.line(X(0), Y(h0), X(0), gy, '#64748b', 1, [3, 4]); D.text('7.5 ft', X(0) + 6, Y(h0 / 2), '#94a3b8', 'left', 11);
+      D.line(X(0), gy + 18, X(d), gy + 18, '#64748b', 1); D.text('20 ft', X(d / 2), gy + 14, '#94a3b8', 'center', 11);
+      D.text('A', X(0) - 8, Y(h0) - 8, '#e2e8f0', 'right', 13, 800); D.text('B', X(d), gy + 34, '#e2e8f0', 'center', 13, 800);
+      // real path traced so far
+      const pos = t => t <= tH ? [vA * t, h0 - 0.5 * g * t * t] : [d + vA * (t - tH), vy2 * (t - tH) - 0.5 * g * (t - tH) ** 2];
+      const tEnd = Math.min(s.t, tH + 2 * vy2 / g * 0.95);
+      const c = D.ctx; c.save(); c.strokeStyle = 'rgba(147,197,253,.8)'; c.lineWidth = 2; c.beginPath();
+      for (let t = 0; t <= tEnd; t += 0.01) { const [x, y] = pos(t); t === 0 ? c.moveTo(X(x), Y(y)) : c.lineTo(X(x), Y(y)); }
+      c.stroke(); c.restore();
+      // ghosts
+      if (st.ghost) {
+        const G = st.ghost;
+        if (G.vA !== null && G.vA > 0) {
+          c.save(); c.strokeStyle = '#f59e0b'; c.lineWidth = 2; c.setLineDash([6, 5]); c.beginPath();
+          for (let t = 0; t <= tH; t += 0.01) { const x = G.vA * t, y = h0 - 0.5 * g * t * t; t === 0 ? c.moveTo(X(x), Y(y)) : c.lineTo(X(x), Y(y)); }
+          c.stroke(); c.restore();
+          D.circle(X(G.vA * tH), gy, 5, null, '#f59e0b', 2.5);
+          D.tag(`your v_A lands at ${fmt(G.vA * tH, 1)} ft`, X(Math.min(G.vA * tH, 34)), Y(4.2), '#f59e0b');
+        }
+        if (s.phase >= 2 && G.vB !== null && G.th !== null) {
+          const gx = G.vB * Math.cos(G.th * DEG), gyv = G.vB * Math.sin(G.th * DEG);
+          c.save(); c.strokeStyle = '#f59e0b'; c.lineWidth = 2; c.setLineDash([6, 5]); c.beginPath();
+          for (let t = 0; t <= Math.max(0, 2 * gyv / g); t += 0.01) { const x = d + gx * t, y = gyv * t - 0.5 * g * t * t; t === 0 ? c.moveTo(X(x), Y(y)) : c.lineTo(X(x), Y(y)); }
+          c.stroke(); c.restore();
+        }
+      }
+      // velocity vector at B
+      if (s.phase >= 2) {
+        const L = 0.32;
+        D.arrow(X(d), gy, X(d + vA * L), Y(vy2 * L), '#34d399', 3);
+        D.line(X(d), gy, X(d + 8), gy, 'rgba(52,211,153,.4)', 1);
+        c.save(); c.strokeStyle = '#34d399'; c.lineWidth = 1.5; c.beginPath(); c.arc(X(d), gy, 3.2 * sc, -th * DEG, 0); c.stroke(); c.restore();
+        D.tag(`v_B = ${fmt(vB, 1)} ft/s, θ = ${fmt(th, 1)}°`, X(d + vA * L) + 6, Y(vy2 * L) - 4, '#34d399', 'left');
+      }
+      const [bx, by] = pos(tEnd);
+      if (s.flash > 0) D.circle(X(d), gy, (1 - s.flash) * 2 * sc + 4, null, `rgba(251,191,36,${s.flash})`, 3);
+      D.circle(X(bx), Y(Math.max(0, by)) - 5, 6, '#d9f99d', '#65a30d', 1.5);
+      const vxNow = vA, vyNow = s.t <= tH ? -g * s.t : vy2 - g * (tEnd - tH);
+      D.text(`t = ${fmt(Math.min(s.t, tEnd), 3)} s`, 14, 22, '#94a3b8', 'left', 12, 700);
+      D.text(`v = (${fmt(vxNow, 1)}, ${fmt(vyNow, 1)}) ft/s`, 14, 40, '#cbd5e1', 'left', 12, 700);
+    }
+  }
+});
+})();
+</script>
+</body>
+</html>
